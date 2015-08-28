@@ -141,10 +141,12 @@ public class SmartUploader {
             fileSize = Files.size(fileToUpload);
 
             // Figure out which segment size to use.
-            if(fileSize >= LARGE_SEGMENT) {
-                segmentSize = LARGE_SEGMENT;
-            } else {
-                segmentSize = SMALL_SEGMENT;
+            if(segmentSize == -1) {
+                if (fileSize >= LARGE_SEGMENT) {
+                    segmentSize = LARGE_SEGMENT;
+                } else {
+                    segmentSize = SMALL_SEGMENT;
+                }
             }
 
             // Expand the host
@@ -254,7 +256,10 @@ public class SmartUploader {
         } else {
             buf = ByteBuffer.allocate(segmentLength);
         }
-        int c = fileChannel.read(buf, segmentStart);
+        int c;
+        synchronized (fileChannel) {
+            c = fileChannel.read(buf, segmentStart);
+        }
 
         if(c == -1) {
             throw new EOFException("Unexpected EOF at offset " + segmentStart);
