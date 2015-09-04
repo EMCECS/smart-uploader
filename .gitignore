@@ -1,8 +1,8 @@
 .DS_Store
 build/
 .idea/
-.ipr
-.ipw
+*.ipr
+*.iws
 .gradle/
 *.iml
 *.swp
