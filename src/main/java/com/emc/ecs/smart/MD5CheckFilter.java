@@ -62,6 +62,11 @@ public class MD5CheckFilter extends ClientFilter {
         return response;
     }
 
+    /**
+     * Extracts the MD5 out of the response Etag header.
+     * @param response response to parse
+     * @return Etag parsed from the response or null if no MD5 could be found.
+     */
     private String getResponseMD5(ClientResponse response) {
         String etag = response.getHeaders().getFirst("etag");
 
@@ -74,6 +79,11 @@ public class MD5CheckFilter extends ClientFilter {
         return null;
     }
 
+    /**
+     * Computes the MD5 of a ByteBuffer and rewinds it.
+     * @param entity the ByteBuffer to checksum.
+     * @return the MD5 hex string.
+     */
     public String byteBufferMD5(ByteBuffer entity) {
         MessageDigest md5;
         try {
@@ -89,6 +99,11 @@ public class MD5CheckFilter extends ClientFilter {
         return toHexString(md5.digest());
     }
 
+    /**
+     * Computes the MD5 of a byte array.
+     * @param entity the byte array to checksum.
+     * @return the MD5 hex string.
+     */
     public String byteArrayMD5(byte[] entity) {
         MessageDigest md5 = null;
         try {
@@ -100,10 +115,21 @@ public class MD5CheckFilter extends ClientFilter {
         return toHexString(md5.digest(entity));
     }
 
-    private String toHexString(byte[] digest) {
-        return DatatypeConverter.printHexBinary(digest);
+    /**
+     * Converts a byte array to a hex string.
+     * @param arr the array to convert.
+     * @return the array's contents as a string of hex characters.
+     */
+    private String toHexString(byte[] arr) {
+        return DatatypeConverter.printHexBinary(arr);
     }
 
+    /**
+     * Computes the MD5 of an InputStream.  The Input stream must support mark/reset and there must not be more than
+     * MAX_MARK bytes to checksum.
+     * @param entity the InputStream whose contents to checksum.
+     * @return the MD5 hex string.
+     */
     public String inputStreamMD5(InputStream entity) {
         MessageDigest md5 = null;
         try {

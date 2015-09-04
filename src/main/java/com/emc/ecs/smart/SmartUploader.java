@@ -36,7 +36,10 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Created by cwikj on 8/27/15.
+ * The SmartUploader can use a pre-signed PUT URL to upload a file to ECS.  In particular, it's targeted at large
+ * files and utilizes ECS's byte range PUT extensions to upload the object in parallel threads.  The ECS Smart Client
+ * is used to implement a software load balancer to the ECS nodes (the DNS entry is queried for all the IP addresses
+ * it resolves to) and filters are added to retry failed segments and to verify the checksum of the segments.
  */
 public class SmartUploader {
     private static final Logger l4j = Logger.getLogger(SmartUploader.class);
@@ -48,6 +51,9 @@ public class SmartUploader {
     /* Buffer size for simple uploads */
     public static final int CHUNK_SIZE = 65536;
 
+    /**
+     * Use commons-cli to parse command line arguments and start the upload.
+     */
     public static void main(String[] args) {
         Options opts = new Options();
 
@@ -135,6 +141,10 @@ public class SmartUploader {
 
     }
 
+    /**
+     * Performs a segmented upload to ECS using the SmartClient and the ECS byte range PUT extensions.  The upload
+     * URL will be parsed
+     */
     private void doSegmentedUpload() {
         try {
             long start = System.currentTimeMillis();
