@@ -214,6 +214,7 @@ public class SmartUploader {
             client = SmartClientFactory.createSmartClient(smartConfig, new URLConnectionClientHandler());
 
             // Add our retry handler
+            client.addFilter(new MD5CheckFilter());
             client.addFilter(new RetryFilter());
 
             // Create a FileChannel for the upload

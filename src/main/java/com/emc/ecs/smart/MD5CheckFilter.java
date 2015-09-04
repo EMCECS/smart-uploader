@@ -68,6 +68,13 @@ public class MD5CheckFilter extends ClientFilter {
      * @return Etag parsed from the response or null if no MD5 could be found.
      */
     private String getResponseMD5(ClientResponse response) {
+        // First look for x-emc-content-md5
+        String contentMd5 = response.getHeaders().getFirst("x-emc-content-md5");
+        if(contentMd5 != null) {
+            return contentMd5.toUpperCase();
+        }
+
+        // Else, it might be in the Etag.
         String etag = response.getHeaders().getFirst("etag");
 
         if(etag == null) {
@@ -76,7 +83,20 @@ public class MD5CheckFilter extends ClientFilter {
 
         LogMF.debug(l4j, "Response Etag: {0}", etag);
 
-        return null;
+        if(etag.startsWith("\"")) {
+            etag = stripQuotes(etag);
+        }
+
+        if(etag.endsWith("-")) {
+            LogMF.info(l4j, "Etag does not look like an MD5: {0}", etag);
+            return null;
+        }
+
+        return etag.toUpperCase();
+    }
+
+    private String stripQuotes(String etag) {
+        return etag.substring(1, etag.length()-1);
     }
 
     /**
