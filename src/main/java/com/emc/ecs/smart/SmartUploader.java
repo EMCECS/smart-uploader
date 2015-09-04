@@ -51,6 +51,14 @@ public class SmartUploader {
     /* Buffer size for simple uploads */
     public static final int CHUNK_SIZE = 65536;
 
+    private static final String THREADS_OPT = "threads";
+    private static final String SIMPLE_OPT = "simple";
+    private static final String SEGMENT_SIZE_OPT = "segment-size";
+    private static final String FILE_OPT = "file";
+    private static final String URL_OPT = "url";
+    private static final String CONTENT_TYPE_OPT = "content-type";
+    private static final String VERIFY_URL_OPT = "verify-url";
+
     /**
      * Use commons-cli to parse command line arguments and start the upload.
      */
@@ -58,20 +66,22 @@ public class SmartUploader {
         Options opts = new Options();
 
         // Optional params
-        opts.addOption(Option.builder().longOpt("threads").hasArg().argName("thread-count")
+        opts.addOption(Option.builder().longOpt(THREADS_OPT).hasArg().argName("thread-count")
                 .desc("Sets the number of threads to upload concurrently.  Default is " + DEFAULT_THREADS).build());
-        opts.addOption(Option.builder().longOpt("simple")
+        opts.addOption(Option.builder().longOpt(SIMPLE_OPT)
                 .desc("For comparison purposes, do a simple single-stream upload instead of a concurrent upload.")
                 .build());
-        opts.addOption(Option.builder().longOpt("segment-size").hasArg().argName("MB")
+        opts.addOption(Option.builder().longOpt(SEGMENT_SIZE_OPT).hasArg().argName("MB")
                 .desc("Size of each upload segment in megabytes.  Defaults to 2MB for uploads less than 128MB and " +
                         "128MB for objects greater than or equal to 128MB.").build());
-        opts.addOption(Option.builder().longOpt("file").hasArg().argName("path-to-file")
+        opts.addOption(Option.builder().longOpt(FILE_OPT).hasArg().argName("path-to-file")
                 .required().desc("(Required) The path to the file to upload.").build());
-        opts.addOption(Option.builder().longOpt("url").hasArg().argName("presigned-upload-url").required()
+        opts.addOption(Option.builder().longOpt(URL_OPT).hasArg().argName("presigned-upload-url").required()
                 .desc("URL used to PUT the file to create an object").build());
-        opts.addOption(Option.builder().longOpt("content-type").hasArg().argName("mimetype")
+        opts.addOption(Option.builder().longOpt(CONTENT_TYPE_OPT).hasArg().argName("mimetype")
                 .desc("Value to use for the Content-Type header.  Defaults to application/octet-stream.").build());
+        opts.addOption(Option.builder().longOpt(VERIFY_URL_OPT).hasArg().argName("url")
+                .desc("If specified, read back the object from this URL and compare with the local file.").build());
 
         DefaultParser dp = new DefaultParser();
 
@@ -86,8 +96,8 @@ public class SmartUploader {
         }
 
         // Required options.
-        String url = cmd.getOptionValue("url");
-        String file = cmd.getOptionValue("file");
+        String url = cmd.getOptionValue(URL_OPT);
+        String file = cmd.getOptionValue(FILE_OPT);
 
         SmartUploader uploader = null;
         try {
@@ -97,27 +107,38 @@ public class SmartUploader {
             System.exit(2);
         }
 
-        if (cmd.hasOption("segment-size")) {
-            uploader.setSegmentSize(Integer.parseInt(cmd.getOptionValue("segment-size")));
+        if (cmd.hasOption(SEGMENT_SIZE_OPT)) {
+            uploader.setSegmentSize(Integer.parseInt(cmd.getOptionValue(SEGMENT_SIZE_OPT)));
         }
-        if (cmd.hasOption("threads")) {
-            uploader.setThreadCount(Integer.parseInt(cmd.getOptionValue("threads")));
+        if (cmd.hasOption(THREADS_OPT)) {
+            uploader.setThreadCount(Integer.parseInt(cmd.getOptionValue(THREADS_OPT)));
         }
-        if (cmd.hasOption("simple")) {
+        if (cmd.hasOption(SIMPLE_OPT)) {
             uploader.setSimpleMode(true);
         }
-        if(cmd.hasOption("content-type")) {
-            uploader.setContentType(cmd.getOptionValue("content-type"));
+        if(cmd.hasOption(CONTENT_TYPE_OPT)) {
+            uploader.setContentType(cmd.getOptionValue(CONTENT_TYPE_OPT));
+        }
+
+        if(cmd.hasOption(VERIFY_URL_OPT)) {
+            try {
+                uploader.setVerifyUrl(new URL(cmd.getOptionValue(VERIFY_URL_OPT)));
+            } catch (MalformedURLException e) {
+                System.err.println("Could not parse verify URL: " + e.getMessage());
+                System.exit(3);
+            }
         }
 
         uploader.doUpload();
 
+        System.exit(0);
     }
 
     private int threadCount = DEFAULT_THREADS;
     private int segmentSize = -1;
     private boolean simpleMode = false;
     private URL uploadUrl;
+    private URL verifyUrl;
     private Path fileToUpload;
     private long fileSize;
     private long bytesUploaded;
@@ -138,12 +159,12 @@ public class SmartUploader {
         } else {
             doSegmentedUpload();
         }
-
     }
 
     /**
      * Performs a segmented upload to ECS using the SmartClient and the ECS byte range PUT extensions.  The upload
-     * URL will be parsed
+     * URL will be parsed and the hostname will be enumerated in DNS to see if it contains multiple 'A' records.  If
+     * so, those will be used to populate the software load balancer.
      */
     private void doSegmentedUpload() {
         try {
@@ -168,6 +189,10 @@ public class SmartUploader {
             } catch (NamingException e) {
                 LogMF.warn(l4j, "Could not resolve hostname: {0}: {1}.  Using as-is.", host, e);
                 ipAddresses.add(host);
+//                ipAddresses.add("10.4.0.101");
+//                ipAddresses.add("10.4.0.102");
+//                ipAddresses.add("10.4.0.103");
+//                ipAddresses.add("10.4.0.104");
             }
             LogMF.info(l4j, "Host {0} resolves to {1}", host, ipAddresses);
 
@@ -244,11 +269,14 @@ public class SmartUploader {
             long elapsed = System.currentTimeMillis() - start;
             printRate(fileSize, elapsed);
 
+            // Verify
+            if(verifyUrl != null) {
+                System.out.printf("\nUpload complete... starting verify...\n");
+            }
         } catch (IOException e) {
             e.printStackTrace();
             System.exit(4);
         }
-
     }
 
     private void doUploadSegment(int segmentNumber) throws IOException {
@@ -264,7 +292,7 @@ public class SmartUploader {
         if(segmentLength == segmentSize) {
             buf = getBuffer();
         } else {
-            buf = ByteBuffer.allocate(segmentLength);
+            buf = ByteBuffer.allocateDirect(segmentLength);
         }
         int c;
         synchronized (fileChannel) {
@@ -296,7 +324,7 @@ public class SmartUploader {
         if(segmentNumber != 0) {
             builder.header("Range", buildRange(segmentStart, segmentLength));
         }
-        builder.put(buf.array());
+        builder.put(new ByteBufferInputStream(buf));
 
         incrementUpload(segmentLength);
         printPercent();
@@ -317,21 +345,14 @@ public class SmartUploader {
      * Calculates the MD5 of a ByteBuffer
      */
     private String calculateMD5(ByteBuffer buf) {
-        MessageDigest md5 = null;
-        try {
-            md5 = MessageDigest.getInstance("MD5");
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("MD5 algorithm not found");
-        }
-        md5.digest(buf.array());
-        return DatatypeConverter.printHexBinary(md5.digest());
+        return MD5CheckFilter.byteBufferMD5(buf);
     }
 
 
     // Try to re-use buffers as much as we can
     private synchronized ByteBuffer getBuffer() {
         if(buffers.isEmpty()) {
-            return ByteBuffer.allocate(segmentSize);
+            return ByteBuffer.allocateDirect(segmentSize);
         } else {
             return buffers.remove();
         }
@@ -492,5 +513,13 @@ public class SmartUploader {
 
     public void setContentType(String contentType) {
         this.contentType = contentType;
+    }
+
+    public URL getVerifyUrl() {
+        return verifyUrl;
+    }
+
+    public void setVerifyUrl(URL verifyUrl) {
+        this.verifyUrl = verifyUrl;
     }
 }

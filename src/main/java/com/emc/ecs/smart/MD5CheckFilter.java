@@ -84,7 +84,7 @@ public class MD5CheckFilter extends ClientFilter {
      * @param entity the ByteBuffer to checksum.
      * @return the MD5 hex string.
      */
-    public String byteBufferMD5(ByteBuffer entity) {
+    public static String byteBufferMD5(ByteBuffer entity) {
         MessageDigest md5;
         try {
             md5 = MessageDigest.getInstance("MD5");
@@ -104,7 +104,7 @@ public class MD5CheckFilter extends ClientFilter {
      * @param entity the byte array to checksum.
      * @return the MD5 hex string.
      */
-    public String byteArrayMD5(byte[] entity) {
+    public static String byteArrayMD5(byte[] entity) {
         MessageDigest md5 = null;
         try {
             md5 = MessageDigest.getInstance("MD5");
@@ -120,7 +120,7 @@ public class MD5CheckFilter extends ClientFilter {
      * @param arr the array to convert.
      * @return the array's contents as a string of hex characters.
      */
-    private String toHexString(byte[] arr) {
+    private static String toHexString(byte[] arr) {
         return DatatypeConverter.printHexBinary(arr);
     }
 
@@ -130,7 +130,7 @@ public class MD5CheckFilter extends ClientFilter {
      * @param entity the InputStream whose contents to checksum.
      * @return the MD5 hex string.
      */
-    public String inputStreamMD5(InputStream entity) {
+    public static String inputStreamMD5(InputStream entity) {
         MessageDigest md5 = null;
         try {
             md5 = MessageDigest.getInstance("MD5");
