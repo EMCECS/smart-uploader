@@ -25,21 +25,21 @@ public class MD5CheckFilterTest extends TestCase {
 
         MD5CheckFilter cf = new MD5CheckFilter();
 
-        Assert.assertEquals("MD5 mismatch", TEST_MD5, cf.byteBufferMD5(bb));
+        Assert.assertEquals("MD5 mismatch", TEST_MD5, MD5Utils.byteBufferMD5(bb));
     }
 
     public void testByteArrayMD5() throws Exception {
         byte[] data = TEST_STRING.getBytes("us-ascii");
         MD5CheckFilter cf = new MD5CheckFilter();
 
-        Assert.assertEquals("MD5 mismatch", TEST_MD5, cf.byteArrayMD5(data));
+        Assert.assertEquals("MD5 mismatch", TEST_MD5, MD5Utils.byteArrayMD5(data));
     }
 
     public void testInputStreamMD5() throws Exception {
         byte[] data = TEST_STRING.getBytes("us-ascii");
         MD5CheckFilter cf = new MD5CheckFilter();
 
-        Assert.assertEquals("MD5 mismatch", TEST_MD5, cf.inputStreamMD5(new ByteArrayInputStream(data)));
+        Assert.assertEquals("MD5 mismatch", TEST_MD5, MD5Utils.inputStreamMD5(new ByteArrayInputStream(data)));
 
     }
 }

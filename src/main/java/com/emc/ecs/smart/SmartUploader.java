@@ -273,11 +273,86 @@ public class SmartUploader {
             // Verify
             if(verifyUrl != null) {
                 System.out.printf("\nUpload complete... starting verify...\n");
+
+                String fileMD5 = computeFileMD5();
+                System.out.printf("File on disk MD5 = %s\n", fileMD5);
+                String objectMD5 = computeObjectMD5();
+                System.out.printf("Object MD5 = %s\n", objectMD5);
+                if(!fileMD5.equals(objectMD5)) {
+                    System.err.printf("ERROR: file MD5 does not match object MD5! %s != %s", fileMD5, objectMD5);
+                    System.exit(10);
+                }
+
+                System.out.printf("\nObject verification passed!\n");
             }
+
+
         } catch (IOException e) {
             e.printStackTrace();
             System.exit(4);
         }
+    }
+
+    private String computeObjectMD5() {
+        MessageDigest md5;
+        try {
+            md5 = MessageDigest.getInstance("MD5");
+        } catch (NoSuchAlgorithmException e) {
+            // Should never happen
+            throw new RuntimeException("Could not load MD5", e);
+        }
+
+        for(long i=0; i<fileSize; i+=segmentSize) {
+            long segmentStart = i;
+            int segmentLength = segmentSize;
+            if(segmentStart + segmentLength > fileSize) {
+                segmentLength = (int)(fileSize - segmentStart);
+            }
+
+            WebResource.Builder builder;
+            try {
+                builder = client.resource(verifyUrl.toURI()).getRequestBuilder();
+            } catch (URISyntaxException e) {
+                // Shouldn't happen; by now we've already parsed the URI
+                throw new RuntimeException("Could not construct request", e);
+            }
+            builder.header("Range", buildRange(segmentStart, segmentLength));
+
+            byte[] data = builder.get(byte[].class);
+            md5.update(data);
+
+            System.out.printf("\rRemote MD5 computation: %d / %d (%d %%)",
+                    segmentStart + segmentLength, fileSize, (segmentStart + segmentLength)*100L/fileSize);
+        }
+        System.out.println();
+
+        return MD5Utils.toHexString(md5.digest());
+    }
+
+    private String computeFileMD5() throws IOException {
+        fileChannel.position(0);
+        MessageDigest md5;
+        try {
+            md5 = MessageDigest.getInstance("MD5");
+        } catch (NoSuchAlgorithmException e) {
+            // Should never happen
+            throw new RuntimeException("Could not load MD5", e);
+        }
+        ByteBuffer buf = getBuffer();
+        int c;
+        long position = 0;
+        buf.clear();
+        while((c = fileChannel.read(buf)) != -1) {
+            buf.rewind();
+            buf.limit(c);
+            md5.update(buf);
+            buf.clear();
+            position += c;
+            System.out.printf("\rLocal MD5 computation: %d / %d (%d %%)", position, fileSize, position * 100L / fileSize);
+        }
+        System.out.println();
+
+        return MD5Utils.toHexString(md5.digest());
     }
 
     private void doUploadSegment(int segmentNumber) throws IOException {
@@ -346,7 +421,7 @@ public class SmartUploader {
      * Calculates the MD5 of a ByteBuffer
      */
     private String calculateMD5(ByteBuffer buf) {
-        return MD5CheckFilter.byteBufferMD5(buf);
+        return MD5Utils.byteBufferMD5(buf);
     }
 
 
