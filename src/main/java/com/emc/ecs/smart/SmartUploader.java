@@ -9,8 +9,7 @@ import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
 import com.sun.jersey.client.urlconnection.URLConnectionClientHandler;
 import org.apache.commons.cli.*;
-import org.apache.log4j.LogMF;
-import org.apache.log4j.Logger;
+import org.apache.log4j.*;
 
 import javax.naming.Context;
 import javax.naming.NamingException;
@@ -58,6 +57,9 @@ public class SmartUploader {
     private static final String URL_OPT = "url";
     private static final String CONTENT_TYPE_OPT = "content-type";
     private static final String VERIFY_URL_OPT = "verify-url";
+    private static final String LOG_LEVEL_OPT = "log-level";
+    private static final String LOG_FILE_OPT = "log-file";
+    private static final String LOG_PATTERN_OPT = "log-pattern";
 
     /**
      * Use commons-cli to parse command line arguments and start the upload.
@@ -82,6 +84,14 @@ public class SmartUploader {
                 .desc("Value to use for the Content-Type header.  Defaults to application/octet-stream.").build());
         opts.addOption(Option.builder().longOpt(VERIFY_URL_OPT).hasArg().argName("url")
                 .desc("If specified, read back the object from this URL and compare with the local file.").build());
+        opts.addOption(Option.builder().longOpt(LOG_LEVEL_OPT).hasArg().argName("level").type(Level.class)
+                .desc("Sets the log level: DEBUG, INFO, WARN, ERROR, or FATAL.  Default is ERROR.").build());
+        opts.addOption(Option.builder().longOpt(LOG_FILE_OPT).hasArg().argName("filename")
+                .desc("Filename to write log messages.  Setting to STDOUT or STDERR will write log messages to the " +
+                        "appropriate process stream.  Default is STDERR.").build());
+        opts.addOption(Option.builder().longOpt(LOG_PATTERN_OPT).hasArg().argName("log4j-pattern").desc("Sets the " +
+                "Log4J pattern to use when writing log messages.  Defaults to " +
+                "'%d{yyyy-MM-dd HH:mm:ss} %-5p [%t] %c{1}:%L - %m%n'").build());
 
         DefaultParser dp = new DefaultParser();
 
@@ -129,6 +139,50 @@ public class SmartUploader {
             }
         }
 
+
+        //
+        // Configure Logging
+        //
+
+        // Pattern
+        String layoutString = "%d{yyyy-MM-dd HH:mm:ss} %-5p [%t] %c{1}:%L - %m%n";
+        if(cmd.hasOption(LOG_PATTERN_OPT)) {
+            layoutString = cmd.getOptionValue(LOG_PATTERN_OPT);
+        }
+        PatternLayout layout  = new PatternLayout(layoutString);
+
+        // Appender
+        String logFileName = "STDERR";
+        if(cmd.hasOption(LOG_FILE_OPT)) {
+            logFileName = cmd.getOptionValue(LOG_FILE_OPT);
+        }
+        Appender appender = null;
+        if(logFileName.equals("STDERR")) {
+            appender = new ConsoleAppender(layout, "System.err");
+        } else if(logFileName.equals("STDOUT")) {
+            appender = new ConsoleAppender(layout, "System.out");
+        } else {
+            // Just a regular file.
+            try {
+                appender = new FileAppender(layout, logFileName);
+            } catch (IOException e) {
+                System.err.println("FATAL: Could not configure appender");
+                e.printStackTrace();
+                System.exit(8);
+            }
+        }
+        LogManager.getRootLogger().addAppender(appender);
+
+        // Log level
+        String logLevel = "ERROR";
+        if(cmd.hasOption(LOG_LEVEL_OPT)) {
+            logLevel = cmd.getOptionValue(LOG_LEVEL_OPT);
+        }
+        LogManager.getRootLogger().setLevel(Level.toLevel(logLevel));
+
+        //
+        // Start the upload
+        //
         uploader.doUpload();
 
         System.exit(0);
