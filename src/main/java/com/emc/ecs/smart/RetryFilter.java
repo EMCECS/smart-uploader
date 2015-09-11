@@ -32,7 +32,7 @@ public class RetryFilter extends ClientFilter {
                 if(response.getStatus() > 399) {
                     throw new UniformInterfaceException(response);
                 }
-                l4j.debug("Request successful.");
+                l4j.trace("Request successful.");
                 return response;
             } catch (RuntimeException orig) {
                 Throwable t = orig;

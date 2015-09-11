@@ -243,10 +243,6 @@ public class SmartUploader {
             } catch (NamingException e) {
                 LogMF.warn(l4j, "Could not resolve hostname: {0}: {1}.  Using as-is.", host, e);
                 ipAddresses.add(host);
-//                ipAddresses.add("10.4.0.101");
-//                ipAddresses.add("10.4.0.102");
-//                ipAddresses.add("10.4.0.103");
-//                ipAddresses.add("10.4.0.104");
             }
             LogMF.info(l4j, "Host {0} resolves to {1}", host, ipAddresses);
 
@@ -268,6 +264,7 @@ public class SmartUploader {
             client = SmartClientFactory.createSmartClient(smartConfig, new URLConnectionClientHandler());
 
             // Add our retry handler
+            client.addFilter(new HostnameVerifierFilter(uploadUrl.getHost()));
             client.addFilter(new MD5CheckFilter());
             client.addFilter(new RetryFilter());
 

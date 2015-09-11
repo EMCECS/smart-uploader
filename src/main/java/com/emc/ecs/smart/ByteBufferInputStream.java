@@ -31,7 +31,7 @@ public class ByteBufferInputStream extends InputStream {
 
         if(toRead == 0) {
             // EOF
-            l4j.debug("EOF");
+            l4j.trace("EOF");
             return -1;
         }
 
