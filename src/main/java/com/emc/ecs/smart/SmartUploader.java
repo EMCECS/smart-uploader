@@ -73,8 +73,8 @@ public class SmartUploader {
         opts.addOption(Option.builder().longOpt(SIMPLE_OPT)
                 .desc("For comparison purposes, do a simple single-stream upload instead of a concurrent upload.")
                 .build());
-        opts.addOption(Option.builder().longOpt(SEGMENT_SIZE_OPT).hasArg().argName("MB")
-                .desc("Size of each upload segment in megabytes.  Defaults to 2MB for uploads less than 128MB and " +
+        opts.addOption(Option.builder().longOpt(SEGMENT_SIZE_OPT).hasArg().argName("bytes")
+                .desc("Size of each upload segment in bytes.  Defaults to 2MB for uploads less than 128MB and " +
                         "128MB for objects greater than or equal to 128MB.").build());
         opts.addOption(Option.builder().longOpt(FILE_OPT).hasArg().argName("path-to-file")
                 .required().desc("(Required) The path to the file to upload.").build());
@@ -253,6 +253,7 @@ public class SmartUploader {
 
             // Configure the load balancer
             Client pingClient = SmartClientFactory.createStandardClient(smartConfig, new URLConnectionClientHandler());
+            pingClient.addFilter(new HostnameVerifierFilter(uploadUrl.getHost()));
             LoadBalancer loadBalancer = smartConfig.getLoadBalancer();
             EcsHostListProvider hostListProvider = new EcsHostListProvider(pingClient, loadBalancer, null, null);
             hostListProvider.setProtocol(uploadUrl.getProtocol());
@@ -320,6 +321,10 @@ public class SmartUploader {
             // Done!
             long elapsed = System.currentTimeMillis() - start;
             printRate(fileSize, elapsed);
+
+            // Release buffers
+            LogMF.debug(l4j, "buffer count at end: {0}", buffers.size());
+            buffers = new LinkedList<>();
 
             // Verify
             if(verifyUrl != null) {
