@@ -48,6 +48,7 @@ public class MD5CheckFilter extends ClientFilter {
 
         // Compare
         if(!responseMd5Hex.toLowerCase().equals(md5hex.toLowerCase())) {
+            LogMF.warn(l4j, "MD5 Mismatch! Request: {0} Response: {1}", md5hex, responseMd5Hex);
             // Wrap in ClientHandlerException so the RetryFilter can catch it.
             throw new ClientHandlerException(
                     new IOException(String.format("MD5 Mismatch! Request: %s Response: %s", md5hex, responseMd5Hex)));
