@@ -60,6 +60,7 @@ public class SmartUploader {
     private static final String LOG_LEVEL_OPT = "log-level";
     private static final String LOG_FILE_OPT = "log-file";
     private static final String LOG_PATTERN_OPT = "log-pattern";
+    private static final String STANDARD_MD5 = "standard-md5";
 
     /**
      * Use commons-cli to parse command line arguments and start the upload.
@@ -92,6 +93,8 @@ public class SmartUploader {
         opts.addOption(Option.builder().longOpt(LOG_PATTERN_OPT).hasArg().argName("log4j-pattern").desc("Sets the " +
                 "Log4J pattern to use when writing log messages.  Defaults to " +
                 "'%d{yyyy-MM-dd HH:mm:ss} %-5p [%t] %c{1}:%L - %m%n'").build());
+        opts.addOption(Option.builder().longOpt(STANDARD_MD5).desc("Use standard Java IO for local checksum " +
+                "instead of NIO").build());
 
         DefaultParser dp = new DefaultParser();
 
@@ -137,6 +140,10 @@ public class SmartUploader {
                 System.err.println("Could not parse verify URL: " + e.getMessage());
                 System.exit(3);
             }
+        }
+
+        if(cmd.hasOption(STANDARD_MD5)) {
+            uploader.setStandardChecksum(true);
         }
 
 
@@ -201,6 +208,7 @@ public class SmartUploader {
     private Queue<ByteBuffer> buffers = new LinkedList<>();
     private boolean failed = false;
     private String contentType = "application/octet-stream";
+    private boolean standardChecksum = false;
 
     public SmartUploader(URL uploadUrl, Path fileToUpload) {
         this.uploadUrl = uploadUrl;
@@ -330,10 +338,16 @@ public class SmartUploader {
             if(verifyUrl != null) {
                 System.out.printf("\nUpload complete... starting verify...\n");
 
-                String fileMD5 = computeFileMD5();
-                System.out.printf("File on disk MD5 = %s\n", fileMD5);
                 String objectMD5 = computeObjectMD5();
                 System.out.printf("Object MD5 = %s\n", objectMD5);
+
+                // At this point we don't need the clients anymore.
+                l4j.debug("Shutting down SmartClient");
+                SmartClientFactory.destroy(client);
+                SmartClientFactory.destroy(pingClient);
+
+                String fileMD5 = standardChecksum?computeFileMD5Standard():computeFileMD5();
+                System.out.printf("File on disk MD5 = %s\n", fileMD5);
                 if(!fileMD5.equals(objectMD5)) {
                     System.err.printf("ERROR: file MD5 does not match object MD5! %s != %s", fileMD5, objectMD5);
                     System.exit(10);
@@ -358,6 +372,7 @@ public class SmartUploader {
             throw new RuntimeException("Could not load MD5", e);
         }
 
+        long start = System.currentTimeMillis();
         for(long i=0; i<fileSize; i+=segmentSize) {
             long segmentStart = i;
             int segmentLength = segmentSize;
@@ -380,12 +395,14 @@ public class SmartUploader {
             System.out.printf("\rRemote MD5 computation: %d / %d (%d %%)",
                     segmentStart + segmentLength, fileSize, (segmentStart + segmentLength)*100L/fileSize);
         }
-        System.out.println();
+        long duration = System.currentTimeMillis() - start;
+        System.out.printf(" :%d b/s\n", fileSize / (duration / 1000));
 
         return MD5Utils.toHexString(md5.digest());
     }
 
     private String computeFileMD5() throws IOException {
+        l4j.debug("Computing File MD5 with NIO");
         fileChannel.position(0);
         MessageDigest md5;
         try {
@@ -394,7 +411,10 @@ public class SmartUploader {
             // Should never happen
             throw new RuntimeException("Could not load MD5", e);
         }
-        ByteBuffer buf = getBuffer();
+
+        long start = System.currentTimeMillis();
+        // Force a 2MB buffer for better performance.
+        ByteBuffer buf = ByteBuffer.allocateDirect(SMALL_SEGMENT);
         int c;
         long position = 0;
         buf.clear();
@@ -406,10 +426,41 @@ public class SmartUploader {
             position += c;
             System.out.printf("\rLocal MD5 computation: %d / %d (%d %%)", position, fileSize, position * 100L / fileSize);
         }
-        System.out.println();
+        long duration = System.currentTimeMillis() - start;
+        System.out.printf(" :%d b/s\n", fileSize/(duration/1000));
 
         return MD5Utils.toHexString(md5.digest());
     }
+
+    private String computeFileMD5Standard() throws IOException {
+        l4j.debug("Computing File MD5 with Java Standard IO");
+        MessageDigest md5;
+        try {
+            md5 = MessageDigest.getInstance("MD5");
+        } catch (NoSuchAlgorithmException e) {
+            // Should never happen
+            throw new RuntimeException("Could not load MD5", e);
+        }
+
+        long start = System.currentTimeMillis();
+
+        try(FileInputStream fis = new FileInputStream(fileToUpload.toFile())) {
+            byte[] buffer = new byte[SMALL_SEGMENT];
+            int c;
+            long position = 0;
+            while((c = fis.read(buffer)) != -1) {
+                md5.update(buffer, 0, c);
+                position += c;
+                System.out.printf("\rLocal MD5 computation: %d / %d (%d %%)", position, fileSize, position * 100L / fileSize);
+            }
+        }
+
+        long duration = System.currentTimeMillis() - start;
+        System.out.printf(" :%d b/s\n", fileSize/(duration/1000));
+
+        return MD5Utils.toHexString(md5.digest());
+    }
+
 
     private void doUploadSegment(int segmentNumber) throws IOException {
         // Calculate the segment
@@ -653,5 +704,13 @@ public class SmartUploader {
 
     public void setVerifyUrl(URL verifyUrl) {
         this.verifyUrl = verifyUrl;
+    }
+
+    public boolean isStandardChecksum() {
+        return standardChecksum;
+    }
+
+    public void setStandardChecksum(boolean standardChecksum) {
+        this.standardChecksum = standardChecksum;
     }
 }
