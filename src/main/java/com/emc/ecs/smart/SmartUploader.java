@@ -396,7 +396,7 @@ public class SmartUploader {
                     segmentStart + segmentLength, fileSize, (segmentStart + segmentLength)*100L/fileSize);
         }
         long duration = System.currentTimeMillis() - start;
-        System.out.printf(" :%d b/s\n", fileSize / (duration / 1000));
+        printRate(duration);
 
         return MD5Utils.toHexString(md5.digest());
     }
@@ -427,7 +427,7 @@ public class SmartUploader {
             System.out.printf("\rLocal MD5 computation: %d / %d (%d %%)", position, fileSize, position * 100L / fileSize);
         }
         long duration = System.currentTimeMillis() - start;
-        System.out.printf(" :%d b/s\n", fileSize/(duration/1000));
+        printRate(duration);
 
         return MD5Utils.toHexString(md5.digest());
     }
@@ -456,9 +456,17 @@ public class SmartUploader {
         }
 
         long duration = System.currentTimeMillis() - start;
-        System.out.printf(" :%d b/s\n", fileSize/(duration/1000));
+        printRate(duration);
 
         return MD5Utils.toHexString(md5.digest());
+    }
+
+    private void printRate(long duration) {
+        duration /= 1000L;
+        if(duration < 1) {
+            duration = 1;
+        }
+        System.out.printf(" :%d b/s\n", fileSize/duration);
     }
 
 
