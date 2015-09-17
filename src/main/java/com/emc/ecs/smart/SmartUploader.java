@@ -50,6 +50,9 @@ public class SmartUploader {
     /* Buffer size for simple uploads */
     public static final int CHUNK_SIZE = 65536;
 
+    public static final int RETRY_DELAY = 2000;
+    public static final int RETRY_COUNT = 3;
+
     private static final String THREADS_OPT = "threads";
     private static final String SIMPLE_OPT = "simple";
     private static final String SEGMENT_SIZE_OPT = "segment-size";
@@ -61,6 +64,8 @@ public class SmartUploader {
     private static final String LOG_FILE_OPT = "log-file";
     private static final String LOG_PATTERN_OPT = "log-pattern";
     private static final String STANDARD_MD5 = "standard-md5";
+    private static final String RETRY_DELAY_OPT = "retry-delay";
+    private static final String RETRY_COUNT_OPT = "retry-count";
 
     /**
      * Use commons-cli to parse command line arguments and start the upload.
@@ -95,6 +100,12 @@ public class SmartUploader {
                 "'%d{yyyy-MM-dd HH:mm:ss} %-5p [%t] %c{1}:%L - %m%n'").build());
         opts.addOption(Option.builder().longOpt(STANDARD_MD5).desc("Use standard Java IO for local checksum " +
                 "instead of NIO").build());
+        opts.addOption(Option.builder().longOpt(RETRY_DELAY_OPT).hasArg().argName("milliseconds")
+                .desc("Initial retry delay in ms.  Subsequent retries will continue to double this exponentially.  " +
+                        "The default value is " + RETRY_DELAY)
+                .build());
+        opts.addOption(Option.builder().longOpt(RETRY_COUNT_OPT).hasArg().argName("count").desc("Number of times to " +
+                "retry failed transactions.  Set to zero to disable retries.  Defaults to " + RETRY_COUNT).build());
 
         DefaultParser dp = new DefaultParser();
 
@@ -144,6 +155,14 @@ public class SmartUploader {
 
         if(cmd.hasOption(STANDARD_MD5)) {
             uploader.setStandardChecksum(true);
+        }
+
+        if(cmd.hasOption(RETRY_COUNT_OPT)) {
+            uploader.setRetryCount(Integer.parseInt(cmd.getOptionValue(RETRY_COUNT_OPT)));
+        }
+
+        if(cmd.hasOption(RETRY_DELAY_OPT)) {
+            uploader.setRetryDelay(Integer.parseInt(cmd.getOptionValue(RETRY_DELAY_OPT)));
         }
 
 
@@ -209,6 +228,8 @@ public class SmartUploader {
     private boolean failed = false;
     private String contentType = "application/octet-stream";
     private boolean standardChecksum = false;
+    private int retryCount = RETRY_COUNT;
+    private int retryDelay = RETRY_DELAY;
 
     public SmartUploader(URL uploadUrl, Path fileToUpload) {
         this.uploadUrl = uploadUrl;
@@ -275,11 +296,12 @@ public class SmartUploader {
             // Add our retry handler
             client.addFilter(new HostnameVerifierFilter(uploadUrl.getHost()));
             client.addFilter(new MD5CheckFilter());
-            client.addFilter(new RetryFilter());
+            client.addFilter(new RetryFilter(retryDelay, retryCount));
 
             // Create a FileChannel for the upload
             fileChannel = new RandomAccessFile(fileToUpload.toFile(), "r").getChannel();
 
+            System.out.printf("Starting upload at %s\n", new Date().toString());
             // The first upload is done without a range to create the initial object.
             doUploadSegment(0);
 
@@ -333,13 +355,17 @@ public class SmartUploader {
             // Release buffers
             LogMF.debug(l4j, "buffer count at end: {0}", buffers.size());
             buffers = new LinkedList<>();
+            System.out.printf("\nUpload completed at %s\n", new Date().toString());
 
             // Verify
             if(verifyUrl != null) {
-                System.out.printf("\nUpload complete... starting verify...\n");
+
+                System.out.printf("starting remote MD5...\n");
 
                 String objectMD5 = computeObjectMD5();
                 System.out.printf("Object MD5 = %s\n", objectMD5);
+
+                System.out.printf("Remote MD5 complete at %s\nStarting local MD5\n", new Date().toString());
 
                 // At this point we don't need the clients anymore.
                 l4j.debug("Shutting down SmartClient");
@@ -347,7 +373,8 @@ public class SmartUploader {
                 SmartClientFactory.destroy(pingClient);
 
                 String fileMD5 = standardChecksum?computeFileMD5Standard():computeFileMD5();
-                System.out.printf("File on disk MD5 = %s\n", fileMD5);
+                System.out.printf("\nFile on disk MD5 = %s\n", fileMD5);
+                System.out.printf("Local MD5 complete at %s\n", new Date().toString());
                 if(!fileMD5.equals(objectMD5)) {
                     System.err.printf("ERROR: file MD5 does not match object MD5! %s != %s", fileMD5, objectMD5);
                     System.exit(10);
@@ -466,7 +493,7 @@ public class SmartUploader {
         if(duration < 1) {
             duration = 1;
         }
-        System.out.printf(" :%d b/s\n", fileSize/duration);
+        System.out.printf(" :%d b/s\n", fileSize / duration);
     }
 
 
@@ -720,5 +747,21 @@ public class SmartUploader {
 
     public void setStandardChecksum(boolean standardChecksum) {
         this.standardChecksum = standardChecksum;
+    }
+
+    public int getRetryCount() {
+        return retryCount;
+    }
+
+    public void setRetryCount(int retryCount) {
+        this.retryCount = retryCount;
+    }
+
+    public int getRetryDelay() {
+        return retryDelay;
+    }
+
+    public void setRetryDelay(int retryDelay) {
+        this.retryDelay = retryDelay;
     }
 }

@@ -17,8 +17,14 @@ import java.io.InputStream;
 public class RetryFilter extends ClientFilter {
     private static final Logger l4j = Logger.getLogger(RetryFilter.class);
 
-    public static final int INITIAL_DELAY = 500;
-    public static final int RETRY_LIMIT = 3;
+    private int initialDelay;
+    private int retryLimit;
+
+    public RetryFilter(int initialDelay, int retryLimit) {
+        this.initialDelay = initialDelay;
+        this.retryLimit = retryLimit;
+        LogMF.debug(l4j, "RetryFilter intialized.  initialDelay={0}, retryLimit={1}", initialDelay, retryLimit);
+    }
 
     @Override
     public ClientResponse handle(ClientRequest clientRequest) throws ClientHandlerException {
@@ -53,7 +59,7 @@ public class RetryFilter extends ClientFilter {
                 }
 
                 // only retry retryLimit times
-                if (++retryCount > RETRY_LIMIT) throw orig;
+                if (++retryCount > retryLimit) throw orig;
 
                 // attempt to reset InputStream
                 if (entityStream != null) {
@@ -67,8 +73,8 @@ public class RetryFilter extends ClientFilter {
                 }
 
                 // wait for retry delay
-                if (INITIAL_DELAY > 0) {
-                    int retryDelay = INITIAL_DELAY * (int) Math.pow(2, retryCount - 1);
+                if (initialDelay > 0) {
+                    int retryDelay = initialDelay * (int) Math.pow(2, retryCount - 1);
                     try {
                         LogMF.debug(l4j, "waiting {0}ms before retry", retryDelay);
                         Thread.sleep(retryDelay);
@@ -77,7 +83,7 @@ public class RetryFilter extends ClientFilter {
                     }
                 }
 
-                LogMF.info(l4j, "error received in response [{0}], retrying ({1} of {2})...", t, retryCount, RETRY_LIMIT);
+                LogMF.info(l4j, "error received in response [{0}], retrying ({1} of {2})...", t, retryCount, retryLimit);
             }
         }
     }
