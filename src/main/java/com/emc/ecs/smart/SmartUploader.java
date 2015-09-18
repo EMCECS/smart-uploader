@@ -5,6 +5,7 @@ import com.emc.rest.smart.SmartClientFactory;
 import com.emc.rest.smart.SmartConfig;
 import com.emc.rest.smart.ecs.EcsHostListProvider;
 import com.sun.jersey.api.client.Client;
+import com.sun.jersey.api.client.ClientHandlerException;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
 import com.sun.jersey.client.urlconnection.URLConnectionClientHandler;
@@ -51,7 +52,7 @@ public class SmartUploader {
     public static final int CHUNK_SIZE = 65536;
 
     public static final int RETRY_DELAY = 2000;
-    public static final int RETRY_COUNT = 3;
+    public static final int RETRY_COUNT = 6;
 
     private static final String THREADS_OPT = "threads";
     private static final String SIMPLE_OPT = "simple";
@@ -66,6 +67,7 @@ public class SmartUploader {
     private static final String STANDARD_MD5 = "standard-md5";
     private static final String RETRY_DELAY_OPT = "retry-delay";
     private static final String RETRY_COUNT_OPT = "retry-count";
+    private static final String SAVE_MD5 = "save-md5";
 
     /**
      * Use commons-cli to parse command line arguments and start the upload.
@@ -106,6 +108,8 @@ public class SmartUploader {
                 .build());
         opts.addOption(Option.builder().longOpt(RETRY_COUNT_OPT).hasArg().argName("count").desc("Number of times to " +
                 "retry failed transactions.  Set to zero to disable retries.  Defaults to " + RETRY_COUNT).build());
+        opts.addOption(Option.builder().longOpt(SAVE_MD5).hasArg().argName("path-to-file")
+                .desc("Sets the file location where the local MD5 hash will be written.").build());
 
         DefaultParser dp = new DefaultParser();
 
@@ -163,6 +167,10 @@ public class SmartUploader {
 
         if(cmd.hasOption(RETRY_DELAY_OPT)) {
             uploader.setRetryDelay(Integer.parseInt(cmd.getOptionValue(RETRY_DELAY_OPT)));
+        }
+
+        if(cmd.hasOption(SAVE_MD5)) {
+            uploader.setSaveMD5(cmd.getOptionValue(SAVE_MD5));
         }
 
 
@@ -230,6 +238,7 @@ public class SmartUploader {
     private boolean standardChecksum = false;
     private int retryCount = RETRY_COUNT;
     private int retryDelay = RETRY_DELAY;
+    private String saveMD5;
 
     public SmartUploader(URL uploadUrl, Path fileToUpload) {
         this.uploadUrl = uploadUrl;
@@ -380,6 +389,12 @@ public class SmartUploader {
                     System.exit(10);
                 }
 
+                if(saveMD5 != null) {
+                    PrintWriter pw = new PrintWriter(saveMD5);
+                    pw.write(fileMD5);
+                    pw.close();
+                }
+
                 System.out.printf("\nObject verification passed!\n");
             }
 
@@ -416,11 +431,28 @@ public class SmartUploader {
             }
             builder.header("Range", buildRange(segmentStart, segmentLength));
 
-            byte[] data = builder.get(byte[].class);
+            byte[] data = null;
+            int attemptCount = 0;
+            while(attemptCount < 3) {
+                try {
+                    data = builder.get((byte[].class));
+                    if(data.length != segmentLength) {
+                        throw new ClientHandlerException("Size of segment length did not match downloaded data; " +
+                                "downloaded: " + data.length + ", segmentLength: " + segmentLength);
+                    }
+                    break;
+                } catch(ClientHandlerException e) {
+                    l4j.warn("Error detected while streaming data from server.  Attempting a retry.");
+                }
+                attemptCount++;
+            }
+            if(data == null) {
+                throw new RuntimeException("Failed to download segment while computing object MD5.");
+            }
             md5.update(data);
 
             System.out.printf("\rRemote MD5 computation: %d / %d (%d %%)",
-                    segmentStart + segmentLength, fileSize, (segmentStart + segmentLength)*100L/fileSize);
+                    segmentStart + segmentLength, fileSize, (segmentStart + segmentLength) * 100L / fileSize);
         }
         long duration = System.currentTimeMillis() - start;
         printRate(duration);
@@ -763,5 +795,13 @@ public class SmartUploader {
 
     public void setRetryDelay(int retryDelay) {
         this.retryDelay = retryDelay;
+    }
+
+    public void setSaveMD5(String saveMD5) {
+        this.saveMD5 = saveMD5;
+    }
+
+    public String getSaveMD5() {
+        return saveMD5;
     }
 }
