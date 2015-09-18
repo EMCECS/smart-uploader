@@ -263,6 +263,18 @@ public class SmartUploader {
             long start = System.currentTimeMillis();
             fileSize = Files.size(fileToUpload);
 
+            // Verify md5Save file path is legit.
+            PrintWriter pw = null;
+            try {
+                if(saveMD5 != null) {
+                    pw = new PrintWriter(saveMD5);
+                }
+            }
+            catch(FileNotFoundException e) {
+                System.err.println("Invalid path specified to save local file MD5: " + e.getMessage());
+                System.exit(3);
+            }
+
             // Figure out which segment size to use.
             if(segmentSize == -1) {
                 if (fileSize >= LARGE_SEGMENT) {
@@ -389,8 +401,7 @@ public class SmartUploader {
                     System.exit(10);
                 }
 
-                if(saveMD5 != null) {
-                    PrintWriter pw = new PrintWriter(saveMD5);
+                if(saveMD5 != null && pw != null) {
                     pw.write(fileMD5);
                     pw.close();
                 }
