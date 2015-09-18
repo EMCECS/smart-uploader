@@ -270,7 +270,7 @@ public class SmartUploader {
                     pw = new PrintWriter(saveMD5);
                 }
             }
-            catch(FileNotFoundException e) {
+            catch(IOException e) {
                 System.err.println("Invalid path specified to save local file MD5: " + e.getMessage());
                 System.exit(3);
             }
