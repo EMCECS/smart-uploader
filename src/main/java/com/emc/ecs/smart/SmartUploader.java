@@ -433,33 +433,37 @@ public class SmartUploader {
                 segmentLength = (int)(fileSize - segmentStart);
             }
 
-            WebResource.Builder builder;
-            try {
-                builder = client.resource(verifyUrl.toURI()).getRequestBuilder();
-            } catch (URISyntaxException e) {
-                // Shouldn't happen; by now we've already parsed the URI
-                throw new RuntimeException("Could not construct request", e);
-            }
-            builder.header("Range", buildRange(segmentStart, segmentLength));
-
             byte[] data = null;
             int attemptCount = 0;
             while(attemptCount < 3) {
+                WebResource.Builder builder;
+                try {
+                    builder = client.resource(verifyUrl.toURI()).getRequestBuilder();
+                } catch (URISyntaxException e) {
+                    // Shouldn't happen; by now we've already parsed the URI
+                    throw new RuntimeException("Could not construct request", e);
+                }
+                builder.header("Range", buildRange(segmentStart, segmentLength));
+
                 try {
                     data = builder.get((byte[].class));
                     if(data.length != segmentLength) {
-                        throw new ClientHandlerException("Size of segment length did not match downloaded data; " +
-                                "downloaded: " + data.length + ", segmentLength: " + segmentLength);
+                        String message = "Size of segment length did not match downloaded data; " +
+                                "downloaded: " + data.length + ", segmentLength: " + segmentLength;
+                        throw new ClientHandlerException(message);
                     }
                     break;
                 } catch(ClientHandlerException e) {
-                    l4j.warn("Error detected while streaming data from server.  Attempting a retry.");
+                    data = null;
+                    l4j.warn("Error detected while streaming data from server.  Attempting a retry.  Retry count: " + attemptCount);
                 }
                 attemptCount++;
             }
+
             if(data == null) {
                 throw new RuntimeException("Failed to download segment while computing object MD5.");
             }
+
             md5.update(data);
 
             System.out.printf("\rRemote MD5 computation: %d / %d (%d %%)",
