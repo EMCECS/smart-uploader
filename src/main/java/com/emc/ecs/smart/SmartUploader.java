@@ -22,7 +22,10 @@ import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
 import javax.xml.bind.DatatypeConverter;
 import java.io.*;
-import java.net.*;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
@@ -286,7 +289,6 @@ public class SmartUploader {
 
             // Expand the host
             String host = uploadUrl.getHost();
-            InetAddress addr = InetAddress.getByName(host);
             List<String> ipAddresses = new ArrayList<>();
             try {
                 ipAddresses = getIPAddresses(host);
@@ -573,9 +575,6 @@ public class SmartUploader {
             throw new IOException(String.format("Read %d bytes, expected %d at offset %d", c, segmentLength, segmentStart));
         }
 
-        // Make an MD5 so we can use Content-MD5.
-        String md5 = calculateMD5(buf);
-
         // We have our data.  Now upload it.
         WebResource.Builder builder;
         try {
@@ -605,14 +604,6 @@ public class SmartUploader {
     private String buildRange(long segmentStart, int segmentLength) {
         return String.format("bytes=%d-%d", segmentStart, segmentStart+segmentLength-1);
     }
-
-    /**
-     * Calculates the MD5 of a ByteBuffer
-     */
-    private String calculateMD5(ByteBuffer buf) {
-        return MD5Utils.byteBufferMD5(buf);
-    }
-
 
     // Try to re-use buffers as much as we can
     private synchronized ByteBuffer getBuffer() {
@@ -710,7 +701,6 @@ public class SmartUploader {
     private static final String ADDR_ATTRIB = "A";
     private static String[] ADDR_ATTRIBS = {ADDR_ATTRIB};
 
-
     /**
      * Use JNDI to bind to DNS and resolve ALL the 'A' records for a host.
      * @param hostname host to resolve
@@ -723,7 +713,7 @@ public class SmartUploader {
         env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.dns.DnsContextFactory");
         idc = new InitialDirContext(env);
 
-        List<String> ipAddresses = new ArrayList<String>();
+        List<String> ipAddresses = new ArrayList<>();
         Attributes attrs = idc.getAttributes(hostname, ADDR_ATTRIBS);
         Attribute attr = attrs.get(ADDR_ATTRIB);
 
