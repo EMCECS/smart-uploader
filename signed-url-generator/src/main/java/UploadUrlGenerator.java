@@ -1,3 +1,17 @@
+/*
+ * Copyright 2015 EMC Corporation. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0.txt
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
 import com.amazonaws.ClientConfiguration;
 import com.amazonaws.HttpMethod;
 import com.amazonaws.auth.BasicAWSCredentials;
@@ -11,7 +25,8 @@ import java.net.URL;
 import java.util.Calendar;
 
 /**
- * Created by cwikj on 8/17/15.
+ * Utility application that generates presigned URLs using the AWS S3 SDK.  You can then use these URLs with other
+ * applications such as the SmartUploader.
  */
 public class UploadUrlGenerator {
     private static final String ENDPOINT_OPTION = "endpoint";
